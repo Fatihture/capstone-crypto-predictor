@@ -11,6 +11,9 @@ def fetch_data(coin_id="bitcoin", days="365"):
     response = requests.get(url, params=params)
     data = response.json()
     
+    if "prices" not in data or "total_volumes" not in data or "market_caps" not in data:
+        raise ValueError(f"API'den eksik veri geldi: {data}")
+
     prices = data["prices"]
     volumes = data["total_volumes"]
     market_caps = data["market_caps"]
