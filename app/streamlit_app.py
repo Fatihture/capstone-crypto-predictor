@@ -12,7 +12,12 @@ from utils.preprocess import preprocess_data
 
 st.title("💰 Kripto Para Tahmin Uygulaması")
 
-coin = st.selectbox("Kripto para seçin:", ["bitcoin", "ethereum", "solana"])
+coin = st.selectbox("Kripto para seçin:", [
+    "bitcoin", "ethereum", "solana",
+    "binancecoin", "ripple", "dogecoin",
+    "litecoin", "polkadot", "avalanche-2", "chainlink"
+])
+
 
 # Model ve scaler yükle
 model = load_model(f"model/{coin}_model.h5", compile=False)
