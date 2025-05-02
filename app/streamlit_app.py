@@ -7,6 +7,10 @@ from tensorflow.keras.models import load_model
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import plotly.graph_objs as go
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from utils.fetch_data import fetch_data
 from utils.preprocess import preprocess_data
 
