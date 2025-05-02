@@ -10,8 +10,8 @@ import plotly.graph_objs as go
 from utils.fetch_data import fetch_data
 from utils.preprocess import preprocess_data
 
-
 st.title("💰 Kripto Para Tahmin Uygulaması")
+
 coin = st.selectbox("Kripto para seçin:", ["bitcoin", "ethereum", "solana"])
 
 # Model ve scaler yükle
@@ -26,74 +26,49 @@ X, y, _ = preprocess_data(df)
 predicted = model.predict(X)
 
 # Dummy sütunlarla birlikte ters ölçekle
-dummy_cols = np.zeros((predicted.shape[0], 2))  # 2 ekstra sütun
+dummy_cols = np.zeros((predicted.shape[0], 2))  # volume & market cap
 combined = np.concatenate([predicted, dummy_cols], axis=1)
 predicted_prices = scaler.inverse_transform(combined)[:, 0]
 
 real = df["price"].values[-len(predicted):]
 
-# 📊 Gerçek vs Tahmin (Plotly ile interaktif grafik)
+# 📊 Gerçek vs Tahmin (Geçmiş)
 st.subheader("📊 Gerçek vs Model Tahmini (Geçmiş Veriler) - İnteraktif")
+
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=df["timestamp"][-len(predicted):], y=real, mode='lines', name='Gerçek'))
 fig.add_trace(go.Scatter(x=df["timestamp"][-len(predicted):], y=predicted_prices, mode='lines', name='Tahmin'))
 fig.update_layout(title=f"{coin.capitalize()} Fiyat Tahmini", xaxis_title="Tarih", yaxis_title="Fiyat (USD)", template="plotly_dark")
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig)
 
-# 📉 Hata Metrikleri
-rmse = np.sqrt(mean_squared_error(real, predicted_prices))
-mae = mean_absolute_error(real, predicted_prices)
-mape = np.mean(np.abs((real - predicted_prices) / real)) * 100
+# 📅 Gelecek Gün Tahmini
+st.subheader("📅 Gelecek Gün Tahmini")
 
-st.markdown("### 📊 Model Performansı (Geçmiş Veriler)")
-st.write(f"**RMSE:** {rmse:,.2f}")
-st.write(f"**MAE:** {mae:,.2f}")
-st.write(f"**MAPE:** %{mape:.2f}")
+future_days = st.slider("Kaç gün ileri tahmin yapılsın?", 1, 60, 15)
 
-# 🔮 7 Günlük İleri Tahmin Fonksiyonu   "recursive forecasting"
-def predict_next_days(model, last_sequence, days, scaler):
-    predictions = []
-    current_seq = last_sequence.copy()
-    for _ in range(days):
-        pred = model.predict(current_seq[np.newaxis, :, :])[0]
-        pred_full = np.concatenate([pred, [0, 0]])  # (3,)
-        predictions.append(pred)
-        current_seq = np.append(current_seq[1:], [pred_full], axis=0)
-    predictions = np.array(predictions)
+# Geleceği tahmin etmek için son pencereyi al
+last_window = X[-1:]
+future_predictions = []
 
-    # Dummy sütun ekle (volume ve market_cap)
-    dummy_cols = np.zeros((predictions.shape[0], 2))
-    combined = np.concatenate([predictions, dummy_cols], axis=1)
-    return scaler.inverse_transform(combined)[:, 0]
+for _ in range(future_days):
+    pred = model.predict(last_window, verbose=0)
+    future_predictions.append(pred[0][0])
 
-# 🔁 Son diziyi alıp ileriye tahmin et
-future_days = 7
-last_seq = X[-1]
-future_predictions = predict_next_days(model, last_seq, future_days, scaler)
+    # Yeni pencere oluştur
+    next_input = np.append(last_window[0][1:], [[pred[0][0]]], axis=0)
+    last_window = next_input.reshape(1, -1, 1)
 
-# 📅 7 Günlük Tahmin Grafiği
-st.subheader("📅 7 Günlük İleriye Dönük Tahmin")
-future_dates = [df["timestamp"].iloc[-1] + datetime.timedelta(days=i+1) for i in range(future_days)]
+# Tahminleri ters ölçekle
+dummy_future = np.zeros((len(future_predictions), 2))  # volume & market_cap için
+combined_future = np.column_stack([future_predictions, dummy_future])
+future_prices = scaler.inverse_transform(combined_future)[:, 0]
 
-fig2 = go.Figure()
-fig2.add_trace(go.Scatter(x=future_dates, y=future_predictions, mode='lines+markers', name="İleri Tahmin", line=dict(color='orange')))
-fig2.update_layout(title="📈 Gelecek 7 Günlük Fiyat Tahmini", xaxis_title="Tarih", yaxis_title="Fiyat (USD)", template="plotly_white")
-st.plotly_chart(fig2, use_container_width=True)
+# Gelecek tarihler
+last_date = df["timestamp"].iloc[-1]
+future_dates = [last_date + datetime.timedelta(days=i+1) for i in range(future_days)]
 
-# 📋 Tablo + İndirme
-future_df = pd.DataFrame({
-    "Tarih": future_dates,
-    "Tahmin Edilen Fiyat (USD)": future_predictions
-})
-st.markdown("### 📋 Tahmin Tablosu (7 Günlük)")
-st.dataframe(future_df)
-
-csv = future_df.to_csv(index=False).encode('utf-8')
-st.download_button(
-    label="⬇️ CSV olarak indir",
-    data=csv,
-    file_name=f'{coin}_7_gunluk_tahmin.csv',
-    mime='text/csv',
-)
-
-# python -m streamlit run app/streamlit_app.py
+# Plotly grafiği
+fig_future = go.Figure()
+fig_future.add_trace(go.Scatter(x=future_dates, y=future_prices, mode="lines+markers", name="Tahmin"))
+fig_future.update_layout(title=f"{future_days} Günlük Gelecek Tahmini", xaxis_title="Tarih", yaxis_title="Fiyat (USD)", template="plotly_dark")
+st.plotly_chart(fig_future)
